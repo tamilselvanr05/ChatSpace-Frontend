@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-ssr/
+.netlify/
+.env
+.env.*
+!.env.example
+*.local
+*.log
+uploads/
