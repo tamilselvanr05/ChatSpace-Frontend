@@ -2,7 +2,7 @@
 import { useState } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { reload, signInWithEmailAndPassword } from "firebase/auth";
 import { auth, authReady } from "./firebase";
 import { apiUrl } from "./config";
 import ChatSpaceLogo from "./components/ChatSpaceLogo";
@@ -30,10 +30,15 @@ function Login() {
 
             await authReady;
             const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+            await reload(credential.user);
             if (!credential.user.emailVerified) {
-                throw new Error("Please verify your email address before signing in.");
+                navigate("/verify-email", {
+                    replace: true,
+                    state: { email: credential.user.email }
+                });
+                return;
             }
-            const token = await credential.user.getIdToken();
+            const token = await credential.user.getIdToken(true);
             await axios.post(
                 apiUrl("/login"),
                 {},

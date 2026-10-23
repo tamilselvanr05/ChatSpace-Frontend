@@ -277,6 +277,21 @@ a {
 .auth-switch a { margin-left: 4px; color: var(--cs-brand-strong); font-weight: 700; }
 .auth-switch a:hover { color: var(--cs-brand); text-decoration: underline; }
 .auth-legal { margin-top: 34px; color: var(--cs-muted); text-align: center; font-size: 11px; line-height: 1.7; }
+.verify-card { max-width: 500px; }
+.verify-icon { display: grid; width: 64px; height: 64px; margin: 0 auto 24px; place-items: center; border: 1px solid color-mix(in srgb, var(--cs-brand) 16%, transparent); border-radius: 20px; color: var(--cs-brand); background: color-mix(in srgb, var(--cs-brand) 9%, white); }
+.verify-heading { margin-bottom: 18px; text-align: center; }
+.verify-heading h2 { margin-top: 10px; }
+.verify-heading p { margin: 10px 0 0; }
+.verify-email { overflow-wrap: anywhere; color: var(--cs-text) !important; font-weight: 700; }
+.verify-instructions { margin: 0 0 20px; color: var(--cs-muted); text-align: center; font-size: 13px; line-height: 1.7; }
+.verify-feedback { margin: 0 0 16px; }
+.verify-actions { display: grid; gap: 10px; }
+.verify-primary { width: 100%; margin-top: 0; }
+.verify-resend { min-height: 46px; padding: 10px 14px; border: 1px solid var(--cs-border); border-radius: 11px; color: var(--cs-brand-strong); background: var(--cs-surface); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.verify-resend:hover:not(:disabled) { border-color: var(--cs-brand); background: var(--cs-surface-raised); }
+.verify-resend:focus-visible { outline: 3px solid color-mix(in srgb, var(--cs-brand) 45%, transparent); outline-offset: 3px; }
+.verify-resend:disabled { cursor: wait; opacity: 0.6; }
+.verify-switch { margin-bottom: 0; }
 .signup-logo { margin-bottom: 22px; }
 .signup-logo > img { width: 52px; height: 52px; flex-basis: 52px; }
 @media (prefers-reduced-motion: reduce) {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
 import axios from "axios";
 import { auth, authReady } from "./firebase";
 import ChatSpaceLogo from "./components/ChatSpaceLogo";
@@ -58,32 +58,24 @@ function Signup() {
 
             const credential = await createUserWithEmailAndPassword(auth, form.email.trim(), form.password);
             await updateProfile(credential.user, { displayName: username });
-            const token = await credential.user.getIdToken(true);
-            await axios.post(apiUrl("/signup"), {}, {
-                headers: { Authorization: `Bearer ${token}` },
-                useProvidedAuthToken: true
+            let verificationError = "";
+            try {
+                await sendEmailVerification(credential.user);
+            } catch (error) {
+                verificationError = error.message || "The verification email could not be sent. Try resending it below.";
+            }
+            navigate("/verify-email", {
+                replace: true,
+                state: {
+                    email: credential.user.email,
+                    verificationError,
+                    verificationEmailSent: !verificationError
+                }
             });
-            await sendEmailVerification(credential.user);
-            if (auth.currentUser?.uid === credential.user.uid) await signOut(auth);
-            alert("Account created. Verify your email before signing in.");
-            navigate("/");
         } catch (err) {
             if (err.code === "auth/email-already-in-use") {
                 setError("A Firebase account already exists for this email. Sign in with that account to link it to ChatSpace.");
                 return;
-            }
-            if (err.response?.data?.code === "EMAIL_NOT_VERIFIED") {
-                try {
-                    const currentUser = auth.currentUser;
-                    if (currentUser) await sendEmailVerification(currentUser);
-                    await signOut(auth);
-                    alert("Account created. Verify your email before signing in.");
-                    navigate("/");
-                    return;
-                } catch (verificationError) {
-                    setError(verificationError.message || "Could not send the verification email.");
-                    return;
-                }
             }
             setError(
                 err.response?.data?.message ||

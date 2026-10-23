@@ -11,6 +11,7 @@ import "./index.css";
 
 import Login from "./login.jsx";
 import Signup from "./signup.jsx";
+import EmailVerificationPending from "./EmailVerificationPending.jsx";
 import App from "./App.jsx";
 import Profile from "./profile.jsx";
 import Settings from "./Settings.jsx";
@@ -32,6 +33,11 @@ createRoot(document.getElementById("root")).render(
                 <Route
                     path="/signup"
                     element={<Signup />}
+                />
+
+                <Route
+                    path="/verify-email"
+                    element={<EmailVerificationPending />}
                 />
 
                 <Route

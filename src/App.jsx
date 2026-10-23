@@ -650,6 +650,17 @@ useEffect(() => {
                 return;
             }
 
+            if (!firebaseUser.emailVerified) {
+                if (!disposed) {
+                    socket.disconnect();
+                    navigate("/verify-email", {
+                        replace: true,
+                        state: { email: firebaseUser.email }
+                    });
+                }
+                return;
+            }
+
             try {
                 if (
                     disposed ||
