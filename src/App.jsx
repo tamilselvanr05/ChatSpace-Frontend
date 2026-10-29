@@ -7,6 +7,7 @@ import { auth } from "./firebase";
 import { apiUrl } from "./config";
 import { getCallHistoryPeerId } from "./utils/callHistoryConversation";
 import { getProfileUser } from "./utils/profileResponse";
+import { updateProfilePhotoViewer } from "./utils/profilePhotoViewer";
 import socket from "./socket";
 import CallOverlay from "./components/CallOverlay";
 import CallHistoryEntry from "./components/CallHistoryEntry";
@@ -57,6 +58,7 @@ function App() {
     const [blockedUserIds, setBlockedUserIds] = useState([]);
     const [groups, setGroups] = useState([]);
     const [selectedGroup, setSelectedGroup] = useState(null);
+    const selectedGroupRef = useRef(null);
     const [showAddMembers, setShowAddMembers] = useState(false);
     const [selectedMembers, setSelectedMembers] = useState([]);
     const [memberSearch, setMemberSearch] = useState("");
@@ -1043,9 +1045,7 @@ useEffect(() => {
             } : group;
             setGroups((previousGroups) => previousGroups.map(updateGroup));
             setSelectedGroup(updateGroup);
-            setPhotoViewerProfile((previous) => previous?.userId?.toString() === changedUserId?.toString()
-                ? { ...previous, profilePhoto }
-                : previous);
+            setPhotoViewerProfile((previous) => updateProfilePhotoViewer(previous, changedUserId, profilePhoto));
         };
         socket.on("profilePhotoUpdated", handleProfilePhotoUpdated);
 
@@ -1169,6 +1169,10 @@ useEffect(() => {
     }, [selectedUser]);
 
     useEffect(() => {
+        selectedGroupRef.current = selectedGroup;
+    }, [selectedGroup]);
+
+    useEffect(() => {
         const handleGroupMembersUpdated = (group) => {
             if (!group?._id) return;
             setGroups((previousGroups) => {
@@ -1182,7 +1186,23 @@ useEffect(() => {
             );
         };
         socket.on("groupMembersUpdated", handleGroupMembersUpdated);
-        return () => socket.off("groupMembersUpdated", handleGroupMembersUpdated);
+        const handleGroupRemoved = ({ groupId }) => {
+            setGroups((previous) => previous.filter((group) => group._id?.toString() !== groupId?.toString()));
+            if (selectedGroupRef.current?._id?.toString() === groupId?.toString()) {
+                selectedGroupRef.current = null;
+                setSelectedGroup(null);
+                setMessages([]);
+                setReplyingTo(null);
+                setShowInfoPanel(false);
+            }
+        };
+        socket.on("groupRemoved", handleGroupRemoved);
+        socket.on("groupDeleted", handleGroupRemoved);
+        return () => {
+            socket.off("groupMembersUpdated", handleGroupMembersUpdated);
+            socket.off("groupRemoved", handleGroupRemoved);
+            socket.off("groupDeleted", handleGroupRemoved);
+        };
     }, []);
 
     useEffect(() => {
@@ -1721,6 +1741,45 @@ if (
             setAddMembersError(error.response?.data?.message || "Members could not be added. Try again.");
         } finally {
             setAddingMembers(false);
+        }
+    };
+
+    const removeGroupMember = async (member) => {
+        if (!selectedGroup || !member?._id || !window.confirm(`Remove ${member.username} from ${selectedGroup.name}?`)) return;
+        try {
+            const response = await axios.delete(apiUrl(`/groups/${selectedGroup._id}/members/${member._id}`));
+            setSelectedGroup(response.data.group);
+            setGroups((previous) => previous.map((group) => group._id === response.data.group._id ? response.data.group : group));
+        } catch (error) {
+            alert(error.response?.data?.message || "The member could not be removed.");
+        }
+    };
+
+    const leaveSelectedGroup = async () => {
+        if (!selectedGroup || !window.confirm(`Leave ${selectedGroup.name}? You will lose access to its messages.`)) return;
+        try {
+            await axios.delete(apiUrl(`/groups/${selectedGroup._id}/members/me`));
+            setGroups((previous) => previous.filter((group) => group._id !== selectedGroup._id));
+            setSelectedGroup(null);
+            setMessages([]);
+            setReplyingTo(null);
+            setShowInfoPanel(false);
+        } catch (error) {
+            alert(error.response?.data?.message || "You could not leave the group.");
+        }
+    };
+
+    const deleteSelectedGroup = async () => {
+        if (!selectedGroup || !window.confirm(`Delete ${selectedGroup.name} for everyone? This permanently deletes its messages and group events.`)) return;
+        try {
+            await axios.delete(apiUrl(`/groups/${selectedGroup._id}`));
+            setGroups((previous) => previous.filter((group) => group._id !== selectedGroup._id));
+            setSelectedGroup(null);
+            setMessages([]);
+            setReplyingTo(null);
+            setShowInfoPanel(false);
+        } catch (error) {
+            alert(error.response?.data?.message || "The group could not be deleted.");
         }
     };
 
@@ -4820,8 +4879,23 @@ if (
                             Admin
                         </span>
                     )}
+                    {selectedGroup.admin?.toString() === userId?.toString() && member._id?.toString() !== userId?.toString() && (
+                        <button type="button" className="cs-private-chat-action" onClick={() => removeGroupMember(member)} aria-label={`Remove ${member.username} from group`}>
+                            Remove member
+                        </button>
+                    )}
                 </div>
             ))}
+        </section>
+        <section className="cs-info-section" aria-label="Group management">
+            {selectedGroup.admin?.toString() === userId?.toString() && (
+                <button type="button" className="cs-private-chat-action" onClick={deleteSelectedGroup} style={{ width: "100%", padding: "10px", cursor: "pointer", marginBottom: "8px" }}>
+                    Delete group
+                </button>
+            )}
+            <button type="button" className="cs-private-chat-action" onClick={leaveSelectedGroup} style={{ width: "100%", padding: "10px", cursor: "pointer" }}>
+                Exit group
+            </button>
         </section>
         <GroupEvents group={selectedGroup} userId={userId} />
     </>
