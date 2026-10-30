@@ -17,11 +17,13 @@ import Profile from "./profile.jsx";
 import Settings from "./Settings.jsx";
 import Themes from "./Themes.jsx";
 import SettingsDetail from "./SettingsDetail.jsx";
+import ScrollbarVisibility from "./components/ScrollbarVisibility.jsx";
 
 createRoot(document.getElementById("root")).render(
     <StrictMode>
 
         <BrowserRouter>
+            <ScrollbarVisibility />
 
             <Routes>
 

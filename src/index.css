@@ -187,6 +187,57 @@
     box-sizing: border-box;
 }
 
+/* Keep native scrolling while making scrollbars invisible until a scroll is in progress. */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+    background: transparent;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background-color: transparent;
+    transition: background-color 220ms ease;
+}
+
+*::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+.cs-is-scrolling {
+    scrollbar-color: rgba(157, 145, 180, 0.58) transparent;
+}
+
+.cs-is-scrolling.cs-scrollbar-fading {
+    scrollbar-color: transparent transparent;
+}
+
+.cs-is-scrolling::-webkit-scrollbar-thumb {
+    background-color: rgba(157, 145, 180, 0.58);
+}
+
+.cs-is-scrolling.cs-scrollbar-fading::-webkit-scrollbar-thumb {
+    background-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *::-webkit-scrollbar-thumb {
+        transition: none;
+    }
+}
+
 html,
 body,
 #root {
