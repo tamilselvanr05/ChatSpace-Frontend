@@ -44,6 +44,7 @@ import { detectSuspiciousMessage } from "./utils/scamDetector";
 import { splitMessageLinks } from "./utils/linkifyMessage";
 import { calculateMessageMenuPosition } from "./utils/messageMenuPosition";
 import { playIncomingNotificationSound } from "./utils/notificationSound";
+import { getGroupMessageNotification } from "./utils/groupMessageNotification";
 import { acquireCallMedia, getCallMediaErrorMessage } from "./utils/callMedia";
 import { getCallConnectionAction } from "./utils/callState";
 
@@ -57,8 +58,10 @@ function App() {
     const [directorySearchResults, setDirectorySearchResults] = useState([]);
     const [blockedUserIds, setBlockedUserIds] = useState([]);
     const [groups, setGroups] = useState([]);
+    const groupsRef = useRef(groups);
     const [selectedGroup, setSelectedGroup] = useState(null);
     const selectedGroupRef = useRef(null);
+    const seenGroupMessageIdsRef = useRef(new Set());
     const [showAddMembers, setShowAddMembers] = useState(false);
     const [selectedMembers, setSelectedMembers] = useState([]);
     const [memberSearch, setMemberSearch] = useState("");
@@ -210,6 +213,8 @@ function App() {
     const discardRecordingRef = useRef(false);
 
     callSnapshotRef.current = { callState, incomingCall };
+    selectedGroupRef.current = selectedGroup;
+    groupsRef.current = groups;
 
     useEffect(() => {
         activeTypingKeyRef.current = selectedGroup
@@ -1169,10 +1174,6 @@ useEffect(() => {
     }, [selectedUser]);
 
     useEffect(() => {
-        selectedGroupRef.current = selectedGroup;
-    }, [selectedGroup]);
-
-    useEffect(() => {
         const handleGroupMembersUpdated = (group) => {
             if (!group?._id) return;
             setGroups((previousGroups) => {
@@ -1188,6 +1189,16 @@ useEffect(() => {
         socket.on("groupMembersUpdated", handleGroupMembersUpdated);
         const handleGroupRemoved = ({ groupId }) => {
             setGroups((previous) => previous.filter((group) => group._id?.toString() !== groupId?.toString()));
+            setUnreadCounts((previous) => {
+                const next = { ...previous };
+                delete next[groupId];
+                return next;
+            });
+            setLastMessages((previous) => {
+                const next = { ...previous };
+                delete next[groupId];
+                return next;
+            });
             if (selectedGroupRef.current?._id?.toString() === groupId?.toString()) {
                 selectedGroupRef.current = null;
                 setSelectedGroup(null);
@@ -1321,57 +1332,44 @@ const showPreview = localStorage.getItem("chatspace_message_preview") !== "false
     }, [userId, selectedUser, users]);
 
     useEffect(() => {
+        if (!userId) return undefined;
         const handleReceiveGroupMessage = (data) => {
-            if (
-                !selectedGroup ||
-                data.groupId?.toString() !==
-                    selectedGroup._id?.toString()
-            ) {
-                return;
+            const messageId = data?._id?.toString();
+            if (!messageId || seenGroupMessageIdsRef.current.has(messageId)) return;
+            seenGroupMessageIdsRef.current.add(messageId);
+            if (seenGroupMessageIdsRef.current.size > 500) {
+                seenGroupMessageIdsRef.current.delete(seenGroupMessageIdsRef.current.values().next().value);
             }
-if (
-    data.senderId?.toString() !==
-    userId?.toString()
-) {
-    socket.emit("messageRead", {
-        messageId: data._id,
-        userId: userId
-    });
 
-    
-    playIncomingNotificationSound();
-}
-
-            setMessages((previousMessages) => {
-                const alreadyExists =
-                    previousMessages.some(
-                        (msg) =>
-                            msg._id === data._id
-                    );
-
-                if (alreadyExists) {
-                    return previousMessages;
-                }
-
-                return [
-                    ...previousMessages,
-                    data
-                ];
+            const groupId = data.groupId?.toString();
+            const group = groupsRef.current.find((item) => item._id?.toString() === groupId);
+            const currentGroupId = selectedGroupRef.current?._id?.toString();
+            const notification = getGroupMessageNotification({
+                message: data,
+                userId,
+                activeGroupId: currentGroupId,
+                groupName: group?.name || selectedGroupRef.current?.name
             });
+            if (!notification) return;
+
+            setLastMessages((previous) => ({ ...previous, [groupId]: notification.preview }));
+            if (!notification.isActive && !notification.isOwn) {
+                setUnreadCounts((previous) => ({ ...previous, [groupId]: (previous[groupId] || 0) + 1 }));
+                if (notification.notification) setMessageNotification(notification.notification);
+            } else if (notification.isActive && !notification.isOwn) {
+                socket.emit("messageRead", { messageId: data._id, userId });
+            }
+            if (!notification.isOwn) playIncomingNotificationSound();
+
+            if (currentGroupId !== groupId) return;
+            setMessages((previous) => previous.some((item) => item._id?.toString() === messageId)
+                ? previous
+                : [...previous, data]);
         };
 
-        socket.on(
-            "receiveGroupMessage",
-            handleReceiveGroupMessage
-        );
-
-        return () => {
-            socket.off(
-                "receiveGroupMessage",
-                handleReceiveGroupMessage
-            );
-        };
-    }, [selectedGroup, userId]);
+        socket.on("receiveGroupMessage", handleReceiveGroupMessage);
+        return () => socket.off("receiveGroupMessage", handleReceiveGroupMessage);
+    }, [userId]);
 
     useEffect(() => {
         const handleUserTyping = (data) => {
@@ -1668,6 +1666,7 @@ if (
     const selectGroup = async (group) => {
         clearTypingForCurrentChat();
         setSelectedGroup(group);
+        setUnreadCounts((previous) => ({ ...previous, [group._id]: 0 }));
         setSelectedUser(null);
         setMessages([]);
         setCallHistory([]);
@@ -2572,6 +2571,12 @@ if (
     <div
         role="status"
         onClick={() => {
+            if (messageNotification.groupId) {
+                const group = groupsRef.current.find((item) => item._id?.toString() === messageNotification.groupId);
+                if (group) selectGroup(group);
+                setMessageNotification(null);
+                return;
+            }
             const senderUser = users.find(
                 (user) =>
                     user._id?.toString() ===
@@ -3098,7 +3103,18 @@ if (
                                                 : `${Object.keys(sidebarTyping[`group:${group._id}`] || {}).length} people typing…`
                                             : `${group.members.length} members`}
                                     </small>
+                                    {lastMessages[group._id] && (
+                                        <small className="cs-sidebar-last-message">{lastMessages[group._id]}</small>
+                                    )}
                                 </div>
+                                {unreadCounts[group._id] > 0 && (
+                                    <span
+                                        aria-label={`${unreadCounts[group._id]} unread messages`}
+                                        style={{ background: "var(--cs-brand)", color: "#ffffff", borderRadius: "50%", minWidth: "20px", height: "20px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: "bold", padding: "0 3px", boxSizing: "border-box" }}
+                                    >
+                                        {unreadCounts[group._id]}
+                                    </span>
+                                )}
                             </div>
                         )
                     )}
